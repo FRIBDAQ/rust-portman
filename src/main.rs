@@ -6,6 +6,7 @@ fn main() {
 
     let p = pool.allocate("RingMaster", "fox").expect("Allocation failed");
     println!("{}", p);
+    let p = pool.allocate("Readout", "fox").expect("Allocation failed");
 
     let usage = pool.usage();
     println!("OK {}", usage.len());
