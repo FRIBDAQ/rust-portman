@@ -71,16 +71,17 @@ impl PortPool {
     fn mark_used(&mut self, port: u16) {
         self.unused.remove(&port);
     }
+    fn get_unused(&self) -> u16 {
+        let pport = self.unused.iter().next().expect("Bug non-empty free port pool iterator failed");
+        *pport
+    }
     pub fn allocate(&mut self, service : &str, user: &str) -> Result<UsedPort, String> {
         if self.unused.len() == 0 {
             return Err(String::from("No free ports available"))
         } else {
 
-            let  port : u16;
-            {
-                let pport = self.unused.iter().next().expect("Bug non-empty free port pool iterator failed");
-                port = *pport;
-            }
+            let  port = self.get_unused();
+            
             self.mark_used(port);
             self.used.insert(port, UsedPort::new(port, service, user));
             Ok(UsedPort::new(port, service, user))
