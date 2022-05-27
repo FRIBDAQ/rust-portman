@@ -87,14 +87,26 @@ impl PortPool {
             Ok(UsedPort::new(port, service, user))
         }
     }
-    pub fn usage(self) -> Vec<UsedPort> {
+    pub fn usage(&self) -> Vec<UsedPort> {
         let mut result : Vec<UsedPort> = Vec::new();
-        for (_, value) in self.used {
+        for (_, value) in &self.used {
             let u = UsedPort::new(
                 value.port(), value.service().as_str(), value.user().as_str()
             );
             result.push(u);
         }
         result
+    }
+    pub fn free(&mut self, port: u16) ->Result<u16, String>     {
+        
+        match self.used.remove(&port) {
+            Some(_) => {
+                self.unused.insert(port);
+                Ok(port)
+            }
+            None => Err(String::from("Port is not allocated"))
+        }
+
+
     }
 }
