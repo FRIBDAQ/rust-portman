@@ -109,4 +109,25 @@ impl PortPool {
 
 
     }
+
+}
+//
+// Unit tests:
+//
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+
+// UsedPort type 
+
+#[test]
+fn uport_construct() {
+    let u = UsedPort::new(100, "Mytest", "Fox");
+    assert_eq!(u.port_number, 100);
+    assert_eq!(u.port_service, String::from("Mytest"));
+    assert_eq!(u.port_user, String::from("Fox"));
+}
+
+// PortPool type:
 }
