@@ -60,7 +60,7 @@ impl PortPool {
         // Generate the unused port pool
 
         let mut unused = HashSet::new();
-        for p in start..(start+n - 1) {
+        for p in start..(start+n) {
             unused.insert(p);
         }
         PortPool {
@@ -119,15 +119,37 @@ mod tests {
     use super::*;
 
 
-// UsedPort type 
+    // UsedPort type 
 
-#[test]
-fn uport_construct() {
-    let u = UsedPort::new(100, "Mytest", "Fox");
-    assert_eq!(u.port_number, 100);
-    assert_eq!(u.port_service, String::from("Mytest"));
-    assert_eq!(u.port_user, String::from("Fox"));
-}
+    #[test]
+    fn uport_construct() {
+        let u = UsedPort::new(100, "Mytest", "Fox");
+        assert_eq!(u.port_number, 100);
+        assert_eq!(u.port_service, String::from("Mytest"));
+        assert_eq!(u.port_user, String::from("Fox"));
+    }
+    #[test]
+    fn uport_port() {
+        let u = UsedPort::new(100, "Mytest", "Fox");
+        assert_eq!(100, u.port());
+    }
+    #[test]
+    fn uport_service() {
+        let u = UsedPort::new(100, "Mytest", "Fox");
+        assert_eq!(String::from("Mytest"), u.service());
+    }
+    #[test]
+    fn uport_user() {
+        let u = UsedPort::new(100, "Mytest", "Fox");
+        assert_eq!(String::from("Fox"), u.user());
+    }
 
-// PortPool type:
+    // PortPool type:
+
+    #[test]
+    fn portpool_construct() {
+        let pool = PortPool::new(1000, 10);
+        assert_eq!(0, pool.used.len());
+        assert_eq!(10, pool.unused.len());
+    }
 }
