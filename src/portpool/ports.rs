@@ -124,6 +124,7 @@ impl PortPool {
             );
             result.push(u);
         }
+        result.sort_by_key(|k| {k.port_number});
         result
     }
     ///
@@ -140,10 +141,7 @@ impl PortPool {
             }
             None => Err(String::from("Port is not allocated"))
         }
-
-
     }
-
 }
 //
 // Unit tests:
@@ -232,4 +230,5 @@ mod tests {
 
         assert_ne!(port1.port_number, port2.port_number);
     }
+
 }
