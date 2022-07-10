@@ -56,6 +56,10 @@ pub struct PortPool {
 }
 
 impl PortPool {
+    ///
+    /// Create a new port pool:
+    ///  start is the starting port.  n is the number of ports in the pool.
+    /// 
     pub fn new(start : u16, n : u16) -> PortPool {
         // Generate the unused port pool
 
@@ -68,18 +72,40 @@ impl PortPool {
             unused : unused
         }
     }
+    // Mark 'port' as used.
+    //
     fn mark_used(&mut self, port: u16) {
         self.unused.remove(&port);
     }
+    // Return a port, any port that is not yet in use.
+    //
     fn get_unused(&self) -> u16 {
         let pport = self.unused.iter().next().expect("Bug non-empty free port pool iterator failed");
         *pport
     }
+    // Return true if there's an allocated port already with the service/user pair.
+    //
+    fn in_use(&self, service : &str, user : &str) -> bool {
+        for (_, value) in self.used.iter() {
+            if value.port_service == service && value.port_user == user {
+                return true;
+            }
+        }
+        return false;
+    }
+    ///
+    /// Allocate a port from the pool.  The port will be advertised with the
+    /// service name 'servie' qualified by the user 'user'.  The return value will be
+    /// a UsedPort describing the allocated port on success or a failure reason string
+    /// on failure.
+    ///
     pub fn allocate(&mut self, service : &str, user: &str) -> Result<UsedPort, String> {
         if self.unused.len() == 0 {
             return Err(String::from("No free ports available"))
         } else {
-
+            if self.in_use(service, user) {
+                return Err(String::from ("Duplicate port allocation attempted"));
+            }
             let  port = self.get_unused();
             
             self.mark_used(port);
@@ -87,6 +113,9 @@ impl PortPool {
             Ok(UsedPort::new(port, service, user))
         }
     }
+    ///
+    /// return a vector of the used ports.
+    /// 
     pub fn usage(&self) -> Vec<UsedPort> {
         let mut result : Vec<UsedPort> = Vec::new();
         for (_, value) in &self.used {
@@ -97,6 +126,11 @@ impl PortPool {
         }
         result
     }
+    ///
+    ///  Given a used 'port' number return it to the unused port pool.
+    ///  The result is eithert the original port number for Ok or an
+    ///  a string describing the failure.
+    /// 
     pub fn free(&mut self, port: u16) ->Result<u16, String>     {
         
         match self.used.remove(&port) {
@@ -151,5 +185,51 @@ mod tests {
         let pool = PortPool::new(1000, 10);
         assert_eq!(0, pool.used.len());
         assert_eq!(10, pool.unused.len());
+    }
+    #[test]
+    fn portpool_allocate_1() {               // Success.
+        let mut pool = PortPool::new(1000, 1);   // One port avail.
+        let result = pool.allocate("Service", "fox");
+        assert!(result.is_ok());
+        let info = result.unwrap();
+        assert_eq!(1000, info.port_number);
+        assert_eq!(String::from("Service"), info.port_service);
+        assert_eq!(String::from("fox"), info.port_user);
+
+    }
+    #[test]
+    fn portpool_allocate_2() {       // No free ports:
+        let mut pool = PortPool::new(1000, 1);
+        pool.allocate("Ok", "fox").unwrap();
+
+        // This one should fail:
+
+        let result = pool.allocate("Fails", "fox");
+        assert!(result.is_err());
+    }
+    #[test]
+    fn portpool_allocate_3() {     // Duplicate allocation for a userfails.
+        let mut pool = PortPool::new(1000, 2);               // won't run out.
+        pool.allocate("SomeService", "fox").unwrap();        // must work. 
+        let result = pool.allocate("SomeService", "fox");    // must fail.
+        assert!(result.is_err());
+    }
+    #[test]
+    fn portpool_allocate_4() {    // Duplicates allowed if different user:
+
+        let mut pool = PortPool::new(1000, 2);               // won't run out.
+        pool.allocate("SomeService", "fox").unwrap();        // must work. 
+        let result = pool.allocate("SomeService", "cerizza");   // Should work.
+        assert!(result.is_ok());
+    }
+    #[test] 
+    fn portpool_allocate_5()  {  // won't reallocate same port:
+        let mut pool = PortPool::new(100, 2);
+        let port1 = pool.allocate("Service_1", "fox").unwrap();
+        let port2 = pool.allocate("Service_2", "fox").unwrap();
+
+        // THe ports allocated must be different:
+
+        assert_ne!(port1.port_number, port2.port_number);
     }
 }
