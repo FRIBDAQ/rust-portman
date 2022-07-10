@@ -222,13 +222,45 @@ mod tests {
     }
     #[test] 
     fn portpool_allocate_5()  {  // won't reallocate same port:
-        let mut pool = PortPool::new(100, 2);
+        let mut pool = PortPool::new(1000, 2);
         let port1 = pool.allocate("Service_1", "fox").unwrap();
         let port2 = pool.allocate("Service_2", "fox").unwrap();
 
         // THe ports allocated must be different:
 
         assert_ne!(port1.port_number, port2.port_number);
+    }
+    #[test]
+    fn usage_1() {
+        let pool = PortPool::new(1000, 2);
+        assert_eq!(0, pool.usage().len());
+
+    }
+    #[test]
+    fn usage_2() {                // Single usage:
+        let mut pool = PortPool::new(1000, 2);
+        let port1 = pool.allocate("Serice_1", "fox").unwrap();
+        let usage = pool.usage();
+        assert_eq!(1, usage.len());
+        assert_eq!(port1.port_number, usage[0].port_number);
+        assert_eq!(port1.port_service, usage[0].port_service);
+        assert_eq!(port1.port_user, usage[0].port_user);
+    }
+    #[test]
+    fn usage_3() {             // Use a couple of ports:
+        let mut pool = PortPool::new(1000, 2);
+        let port1 = pool.allocate("service 1", "fox").unwrap();
+        let port2 = pool.allocate("service_1", "cerizza").unwrap();
+        let mut allocated = vec![port1, port2];
+        allocated.sort_by_key(|v| {v.port_number});
+        let used = pool.usage();
+        assert_eq!(allocated.len(), used.len());
+        for i in 0..used.len() {
+            assert_eq!(allocated[i].port_number, used[i].port_number);
+            assert_eq!(allocated[i].port_service, used[i].port_service);
+            assert_eq!(allocated[i].port_user, used[i].port_user);
+        }
+
     }
 
 }
