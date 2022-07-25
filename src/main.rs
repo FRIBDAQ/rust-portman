@@ -11,34 +11,25 @@ fn main() {
         .expect("Allocation failed");
     let p2 = pool.allocate("Readout", "fox").expect("Allocation failed");
 
-    print_usage(&pool);
+    print_usage(&mut pool);
 
     // Free:
 
     pool.free(p1.port()).unwrap();
-    print_usage(&pool);
+    print_usage(&mut pool);
 
     pool.free(p2.port()).unwrap();
-    print_usage(&pool);
+    print_usage(&mut pool);
 
     let result = responder::process_request("LIST", &mut pool);
-    if !result.is_err() {
-        panic!("Shouild have been error.");
+    if !result.is_ok() {
+        panic!("Should have been error.");
     }
-}
-fn print_usage(pool: &ports::PortPool) {
-    println!("{}", get_usage(pool));
 }
 
-fn get_usage(pool: &ports::PortPool) -> String {
-    let usage = pool.usage();
-    let mut result = String::new();
-    result += format!("OK {}\n", usage.len()).as_str();
-    for p in &usage {
-        result += format!("{}\n", p).as_str();
-    }
-    if usage.len() > 0 {
-        result.pop(); // Get rid of extra trailing \n
-    }
-    result
+fn print_usage(pool: &mut ports::PortPool) {
+    println!(
+        "{}", 
+        responder::process_request("LIST", pool).unwrap()
+    );
 }
