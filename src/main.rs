@@ -6,19 +6,15 @@ fn main() {
 
     // Allocation patterns:
 
-    let p1 = pool
-        .allocate("RingMaster", "fox")
-        .expect("Allocation failed");
-    let p2 = pool.allocate("Readout", "fox").expect("Allocation failed");
+    println!(
+        "{}",
+        responder::process_request("GIMME RingMaster fox", &mut pool).unwrap()
+    );
+    println!(
+        "{}",
+        responder::process_request("GIMME Readout fox", &mut pool).unwrap()
+    );
 
-    print_usage(&mut pool);
-
-    // Free:
-
-    pool.free(p1.port()).unwrap();
-    print_usage(&mut pool);
-
-    pool.free(p2.port()).unwrap();
     print_usage(&mut pool);
 
     let result = responder::process_request("LIST", &mut pool);
@@ -28,8 +24,5 @@ fn main() {
 }
 
 fn print_usage(pool: &mut ports::PortPool) {
-    println!(
-        "{}", 
-        responder::process_request("LIST", pool).unwrap()
-    );
+    println!("{}", responder::process_request("LIST", pool).unwrap());
 }

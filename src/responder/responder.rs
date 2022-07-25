@@ -66,5 +66,29 @@ fn list(pool: &ports::PortPool) -> String {
 
 // Actually do the allocation of a port.
 fn allocate(command: &Vec<&str>, pool: &mut ports::PortPool) -> Result<String, String> {
-    Err(String::from("Unimplemented"))
+    // there must be exactly three command words:
+
+    if command.len() != 3 {
+        Err(String::from(
+            "FAIL GIMME request must have a service and user",
+        ))
+    } else {
+        let allocation = pool.allocate(command[1], command[2]);
+        match allocation {
+            Ok(port_info) => Ok(report_allocation(port_info)),
+            Err(reason) => Err(report_failure(&reason)),
+        }
+    }
+}
+// Report a port allocation:
+
+fn report_allocation(allocation: ports::UsedPort) -> String {
+    format!("OK {}", allocation.port())
+}
+// Report a port allocation failure - reall just need to prefix FAIL on the string:
+
+fn report_failure(reason: &str) -> String {
+    let mut result: String = String::from("FAIL ");
+    result += reason;
+    return result;
 }
