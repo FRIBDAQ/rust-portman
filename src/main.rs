@@ -1,6 +1,6 @@
-mod portpool;
-mod responder;
-use portpool::ports;
+use portman::portpool::ports;
+use portman::responder::responder;
+
 fn main() {
     let mut pool = ports::PortPool::new(30000, 1000);
 
@@ -20,6 +20,11 @@ fn main() {
 
     pool.free(p2.port()).unwrap();
     print_usage(&pool);
+
+    let result = responder::process_request("LIST", &mut pool);
+    if !result.is_err() {
+        panic!("Shouild have been error.");
+    }
 }
 fn print_usage(pool: &ports::PortPool) {
     println!("{}", get_usage(pool));
