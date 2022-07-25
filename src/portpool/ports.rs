@@ -180,7 +180,7 @@ mod tests {
         assert_eq!(String::from("Fox"), u.user());
     }
 
-    // PortPool type:
+    // PortPool type - Construction
 
     #[test]
     fn portpool_construct() {
@@ -188,6 +188,7 @@ mod tests {
         assert_eq!(0, pool.used.len());
         assert_eq!(10, pool.unused.len());
     }
+    // PortPool type - allocation
     #[test]
     fn portpool_allocate_1() {
         // Success.
@@ -238,6 +239,7 @@ mod tests {
 
         assert_ne!(port1.port_number, port2.port_number);
     }
+    // PortPool type usage listing.
     #[test]
     fn usage_1() {
         let pool = PortPool::new(1000, 2);
@@ -269,5 +271,33 @@ mod tests {
             assert_eq!(allocated[i].port_service, used[i].port_service);
             assert_eq!(allocated[i].port_user, used[i].port_user);
         }
+    }
+    // PortPool type: free pool.
+    #[test]
+    fn free_1() {
+        let mut pool = PortPool::new(1000, 2);
+        // any free gives err:
+
+        let result = pool.free(1000);
+        assert!(result.is_err());
+    }
+    #[test]
+    fn free_2() {
+        let mut pool = PortPool::new(1000, 1);
+        let port = pool.allocate("service", "fox").unwrap();
+        let result = pool.free(port.port_number);
+        assert!(result.is_ok());
+    }
+    #[test]
+    fn free_3() {
+        let mut pool = PortPool::new(1000, 1);
+        let port = pool.allocate("service", "fox").unwrap();
+
+        // On free, the free list is size 1 and has the
+        // allocated pool item back:
+
+        pool.free(port.port_number).unwrap();
+        assert_eq!(1, pool.unused.len());
+        assert!(pool.unused.contains(&port.port_number));
     }
 }
