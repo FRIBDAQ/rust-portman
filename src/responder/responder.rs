@@ -1,94 +1,122 @@
 use crate::portpool::ports;
+use std::sync::mpsc;
+
+/// ReplyMessage
+///    Each RequestMessage has  corresponding reply message type
+///    that's sent along the reply channel that's supplied  in
+///    the message request (if provided).
+///    The actual message sent to a channels is Result where Ok contains
+///    a reply message and Err contains an error message string.
+///    Note that FreePort requests don't need a reply.
+///
+pub enum ReplyMessage {
+    AllocatePort(u16),
+    ListAllocations(Vec<ports::UsedPort>),
+}
+
+type Reply = Result<ReplyMessage, String>;
+
+/// RequestMessage
+///    This enum defines the set of messages that can be sent
+///  to us, the responder to perform operations.  There are three
+///  operations currently provided:
+///
+///  *   AllocatePort - allocates a new port.
+///  *   FreePort     - frees a port that's been allocated.
+///  *   ListAllocations - Provides a list of all allocations:
+///
+pub enum RequestMessage {
+    AllocatePort {
+        service_name: String,
+        user_name: String,
+        reply_chan: mpsc::Sender<Reply>,
+    },
+    FreePort(u16),
+    ListAllocations(mpsc::Sender<Reply>),
+    Terminate,
+}
 
 ///
-/// Contains code to respond to requests from the port manager.
-/// does so by interacting with a port pool passed in as a
-/// parameter.
-/// Requests are a command line like entity that can be:
-/// Each request generates a reply which is either:
+/// responder
+///    This handles the logic of getting a request, dispatching it
+///    and sending the reply/result.
+///    We are an infinite loop, intended to run in a thread:
 ///
-/// FAIL textual reason for failure
+///    *   base - port pool base port number.
+///    *   num  - Number of ports to manage.
+///    *   request_chan - channel over which the requests are received.
 ///
-/// or
-///
-/// OK  followed by request specific information.
-///
-/// Requests:
-///
-/// GIMME service user
-///    Requests  a port to be used to provide/advertise the
-///    service 'service' for the specified 'user'.
-///    on success the reply is 'OK portnum' where portnum
-///    is the port number allocated to that service.
-///
-/// LIST
-///     Returns a string containing a list of port usages.
-///     The result contains lines separated by \n.  The first line
-///     is of the form 'OK n' where 'n' is the number of lines that
-///     follow. Remaining lines are of the form:
-///     number service user
-///     where number is an allocated port number and service,
-///     user are the service and user to which that port number
-///     was allocated.
-///
-/// Note that the actual returns are a Result<String, String>
-/// where OK resuts are an Ok result and FAIl results are an
-/// Err result.
-pub fn process_request(request: &str, pool: &mut ports::PortPool) -> Result<String, String> {
-    let command_words = request.split_whitespace().collect::<Vec<&str>>();
-    if command_words.len() < 1 {
-        Err(String::from("FAIL No command in request"))
-    } else {
-        let command = command_words[0];
-        match command {
-            "LIST" => Ok(list(pool)),
-            "GIMME" => allocate(&command_words, pool),
-            _ => Err(String::from("FAIL Invalid request")),
+pub fn responder(base: u16, num: u16, request_chan: mpsc::Receiver<RequestMessage>) {
+    let mut pool = ports::PortPool::new(base, num);
+    loop {
+        let request = request_chan.recv().unwrap();
+        match request {
+            RequestMessage::AllocatePort {
+                service_name,
+                user_name,
+                reply_chan,
+            } => {
+                println!("Request service {} for user {}", service_name, user_name);
+                match pool.allocate(&service_name, &user_name) {
+                    Ok(alloc) => reply_chan
+                        .send(Ok(ReplyMessage::AllocatePort(alloc.port())))
+                        .unwrap(),
+                    Err(msg) => reply_chan.send(Err(msg)).unwrap(),
+                }
+            }
+            RequestMessage::FreePort(p) => {
+                println!("Free Port {}", p);
+            }
+            RequestMessage::ListAllocations(reply_chan) => {
+                println!("List allocations");
+                reply_chan
+                    .send(Ok(ReplyMessage::ListAllocations(vec![])))
+                    .unwrap();
+            }
+            RequestMessage::Terminate => break,
         }
     }
 }
+///
+/// request_port
+///    Interacts with the service thread to obtain a new port.
+/// This takes care of formatting and sending the request as well
+/// as receiving the reply.
+///
+///   *  service_name   - Name of service to advertise.
+///   *  user_name      - Name of user advertising service.
+///   *  request        - Sender side of the request channel.
+///   *  reply          -  pair containing sender/receiver ends of the reply.
+///
+///    The return value is a Result<u16, String> decoded from the actual
+/// raw server reply.
+///
+pub fn request_port(
+    service_name: &str,
+    user_name: &str,
+    request: &mpsc::Sender<RequestMessage>,
+    reply: (mpsc::Sender<Reply>, mpsc::Receiver<Reply>),
+) -> Result<u16, String> {
+    let reply_receiver = reply.1;
+    let reply_sender = reply.0;
 
-//  list
-//   Produce a list of the actual pool allocation.
+    // Send the request:
 
-fn list(pool: &ports::PortPool) -> String {
-    let usage = pool.usage();
-    let mut result = String::new();
-    result += format!("OK {}\n", usage.len()).as_str();
-    for p in &usage {
-        result += format!("{}\n", p).as_str();
+    request
+        .send(RequestMessage::AllocatePort {
+            service_name: String::from(service_name),
+            user_name: String::from(user_name),
+            reply_chan: reply_sender,
+        })
+        .unwrap();
+
+    // Get the reply:
+
+    match reply_receiver.recv().unwrap() {
+        Ok(msg) => match msg {
+            ReplyMessage::AllocatePort(port) => Ok(port),
+            _ => Err(String::from("Invalid reply message type")),
+        },
+        Err(msg) => Err(msg),
     }
-    if usage.len() > 0 {
-        result.pop(); // Get rid of extra trailing \n
-    }
-    result
-}
-
-// Actually do the allocation of a port.
-fn allocate(command: &Vec<&str>, pool: &mut ports::PortPool) -> Result<String, String> {
-    // there must be exactly three command words:
-
-    if command.len() != 3 {
-        Err(String::from(
-            "FAIL GIMME request must have a service and user",
-        ))
-    } else {
-        let allocation = pool.allocate(command[1], command[2]);
-        match allocation {
-            Ok(port_info) => Ok(report_allocation(port_info)),
-            Err(reason) => Err(report_failure(&reason)),
-        }
-    }
-}
-// Report a port allocation:
-
-fn report_allocation(allocation: ports::UsedPort) -> String {
-    format!("OK {}", allocation.port())
-}
-// Report a port allocation failure - reall just need to prefix FAIL on the string:
-
-fn report_failure(reason: &str) -> String {
-    let mut result: String = String::from("FAIL ");
-    result += reason;
-    return result;
 }

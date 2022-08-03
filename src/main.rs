@@ -1,28 +1,31 @@
-use portman::portpool::ports;
 use portman::responder::responder;
+use std::sync::mpsc;
+use std::thread;
 
 fn main() {
-    let mut pool = ports::PortPool::new(30000, 1000);
+    let (request_send, request_recv) = mpsc::channel();
+    let reply = mpsc::channel();
 
-    // Allocation patterns:
+    let handle = thread::spawn(|| responder::responder(30000, 1000, request_recv));
 
-    println!(
-        "{}",
-        responder::process_request("GIMME RingMaster fox", &mut pool).unwrap()
-    );
-    println!(
-        "{}",
-        responder::process_request("GIMME Readout fox", &mut pool).unwrap()
-    );
+    // now we make some requests and get some replies:
 
-    print_usage(&mut pool);
+    let port = responder::request_port("my_service", "fox", &request_send, reply);
+    analyze_port(port);
 
-    let result = responder::process_request("LIST", &mut pool);
-    if !result.is_ok() {
-        panic!("Should have been error.");
-    }
+    let terminate = responder::RequestMessage::Terminate;
+    request_send.send(terminate).unwrap();
+
+    handle.join().unwrap();
 }
 
-fn print_usage(pool: &mut ports::PortPool) {
-    println!("{}", responder::process_request("LIST", pool).unwrap());
+fn analyze_port(p: Result<u16, String>) {
+    match p {
+        Ok(p) => {
+            println!("Port {} allocated", p);
+        }
+        Err(msg) => {
+            println!("Port allocation error {}", msg);
+        }
+    }
 }
