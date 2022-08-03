@@ -11,7 +11,11 @@ fn main() {
     // now we make some requests and get some replies:
 
     let port = responder::request_port("my_service", "fox", &request_send, reply);
-    analyze_port(port);
+    analyze_port(&port);
+
+    if let Ok(port_num) = port {
+        responder::release_port(port_num, &request_send).unwrap();
+    }
 
     let terminate = responder::RequestMessage::Terminate;
     request_send.send(terminate).unwrap();
@@ -19,7 +23,7 @@ fn main() {
     handle.join().unwrap();
 }
 
-fn analyze_port(p: Result<u16, String>) {
+fn analyze_port(p: &Result<u16, String>) {
     match p {
         Ok(p) => {
             println!("Port {} allocated", p);

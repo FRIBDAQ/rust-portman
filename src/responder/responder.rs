@@ -66,6 +66,7 @@ pub fn responder(base: u16, num: u16, request_chan: mpsc::Receiver<RequestMessag
             }
             RequestMessage::FreePort(p) => {
                 println!("Free Port {}", p);
+                let _ = pool.free(p).is_ok();  // We can't really handle errors.
             }
             RequestMessage::ListAllocations(reply_chan) => {
                 println!("List allocations");
@@ -119,4 +120,18 @@ pub fn request_port(
         },
         Err(msg) => Err(msg),
     }
+}
+///
+/// release_port
+///     Release an allocated port.
+///
+/// - port is the port to release and
+/// - request is the sender side of the channel on which we make requests
+///    of the responder.
+///
+pub fn release_port(
+    port: u16,
+    request: &mpsc::Sender<RequestMessage>,
+) -> Result<(), mpsc::SendError<RequestMessage>> {
+    request.send(RequestMessage::FreePort(port))
 }
