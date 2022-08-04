@@ -64,7 +64,7 @@ fn main() {
 
     for request in server.incoming() {
         if let Ok(socket) = request {
-            process_request(socket);
+            process_request(&request_send, socket);
         } else {
             // Fill in failure code here when we can figure out
             // what it should look like.
@@ -74,7 +74,7 @@ fn main() {
 
 //  Given a connected socket, returns the line of text
 //  received from it.  WE don't really havfe
-fn read_request_line(socket: TcpStream) -> String {
+fn read_request_line(socket: &TcpStream) -> String {
     let mut line: Vec<u8> = vec![];
     let mut reader = BufReader::new(socket.try_clone().unwrap());
     if let Ok(count) = reader.read_until(b'\n', &mut line) {
@@ -85,12 +85,64 @@ fn read_request_line(socket: TcpStream) -> String {
 }
 
 fn decode_request(request_line: &str) -> ClientRequest {
-    ClientRequest::Invalid
+    let request_words: Vec<&str> = request_line.split_ascii_whitespace().collect::<Vec<&str>>();
+
+    // Need a word:
+
+    if request_words.len() >= 1 {
+        match request_words[0] {
+            "GIMME" => {
+                if request_words.len() == 3 {
+                    ClientRequest::Gimme {
+                        service_name: request_words[1].to_string(),
+                        user_name: request_words[2].to_string(),
+                    }
+                } else {
+                    ClientRequest::Invalid
+                }
+            }
+            "LIST" => ClientRequest::List,
+            "TERMINATE" => ClientRequest::Terminate,
+            _ => ClientRequest::Invalid,
+        }
+    } else {
+        ClientRequest::Invalid
+    }
 }
 
-fn process_request(socket: TcpStream) {
+fn process_request(req_chan: &mpsc::Sender<responder::RequestMessage>, socket: TcpStream) {
+    /// socket.set_read_timeout();    // Limit time to request.
     println!("Connected from {:#?}", socket.peer_addr());
-    let request_line = read_request_line(socket);
-    println!("Request: {}", read_request_line(socket));
-    let request = decode_request(request_line);
+    let request_line = read_request_line(&socket);
+    println!("Request: {}", request_line);
+    let request = decode_request(&request_line);
+    match request {
+        ClientRequest::Gimme {
+            service_name,
+            user_name,
+        } => {
+            println!(
+                "Client Requesting port for {} user {}",
+                service_name, user_name
+            );
+        }
+        ClientRequest::List => {
+            println!("Client requesting a list of port allocations");
+        }
+        ClientRequest::Terminate => {
+            println!("Client requesting shutdown");
+        }
+        ClientRequest::Invalid => {
+            println!("Client sent an invalid request");
+        }
+    }
 }
+
+//
+//  Functions to process individual requests
+//
+
+
+//
+// Monitor a socket so that its port can be released when
+// the socket either closes or, alternatively, 
