@@ -66,7 +66,7 @@ pub fn responder(base: u16, num: u16, request_chan: mpsc::Receiver<RequestMessag
             }
             RequestMessage::FreePort(p) => {
                 println!("Free Port {}", p);
-                let _ = pool.free(p).is_ok();  // We can't really handle errors.
+                let _ = pool.free(p).is_ok(); // We can't really handle errors.
             }
             RequestMessage::ListAllocations(reply_chan) => {
                 println!("List allocations");
@@ -87,7 +87,6 @@ pub fn responder(base: u16, num: u16, request_chan: mpsc::Receiver<RequestMessag
 ///   *  service_name   - Name of service to advertise.
 ///   *  user_name      - Name of user advertising service.
 ///   *  request        - Sender side of the request channel.
-///   *  reply          -  pair containing sender/receiver ends of the reply.
 ///
 ///    The return value is a Result<u16, String> decoded from the actual
 /// raw server reply.
@@ -96,10 +95,8 @@ pub fn request_port(
     service_name: &str,
     user_name: &str,
     request: &mpsc::Sender<RequestMessage>,
-    reply: (mpsc::Sender<Reply>, mpsc::Receiver<Reply>),
 ) -> Result<u16, String> {
-    let reply_receiver = reply.1;
-    let reply_sender = reply.0;
+    let (reply_sender, reply_receiver) = mpsc::channel();
 
     // Send the request:
 
@@ -134,4 +131,36 @@ pub fn release_port(
     request: &mpsc::Sender<RequestMessage>,
 ) -> Result<(), mpsc::SendError<RequestMessage>> {
     request.send(RequestMessage::FreePort(port))
+}
+/// get_allocations
+///    Returns the vector of allocations (it's up to the caller to decide
+/// how to format them).
+///
+/// ### Parameters:
+///
+/// -   request - channel along which the request will be done.
+///
+///  ### Returns:
+///
+///    Result<Vec<UsedPort>, String>
+pub fn get_allocations(
+    request: &mpsc::Sender<RequestMessage>,
+) -> Result<Vec<ports::UsedPort>, String> {
+    let (reply_sender, reply_receiver) = mpsc::channel();
+    request
+        .send(RequestMessage::ListAllocations(reply_sender))
+        .unwrap();
+    match reply_receiver.recv() {
+        Ok(msg) => match msg {
+            Ok(replyok) => {
+                if let ReplyMessage::ListAllocations(allocs) = replyok {
+                    Ok(allocs)
+                } else {
+                    Err(String::from("Invalid reply from port manager"))
+                }
+            }
+            Err(msg) => Err(msg),
+        },
+        Err(msg) => Err(msg.to_string()),
+    }
 }
