@@ -55,14 +55,12 @@ pub fn responder(base: u16, num: u16, request_chan: mpsc::Receiver<RequestMessag
                 service_name,
                 user_name,
                 reply_chan,
-            } => {
-                match pool.allocate(&service_name, &user_name) {
-                    Ok(alloc) => reply_chan
-                        .send(Ok(ReplyMessage::AllocatePort(alloc.port())))
-                        .unwrap(),
-                    Err(msg) => reply_chan.send(Err(msg)).unwrap(),
-                }
-            }
+            } => match pool.allocate(&service_name, &user_name) {
+                Ok(alloc) => reply_chan
+                    .send(Ok(ReplyMessage::AllocatePort(alloc.port())))
+                    .unwrap(),
+                Err(msg) => reply_chan.send(Err(msg)).unwrap(),
+            },
             RequestMessage::FreePort(p) => {
                 let _ = pool.free(p).is_ok(); // We can't really handle errors.
             }

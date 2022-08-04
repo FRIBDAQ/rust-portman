@@ -6,3 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+#  Provide argument processing using the 'clap' crate
+#  per tutorial at:  
+#   https://blog.logrocket.com/command-line-argument-parsing-rust-using-clap/
+#  Reference at:
+#   https://docs.rs/clap/latest/clap/
+#
+clap = { version = "3.1.6", features = ["derive"]}
