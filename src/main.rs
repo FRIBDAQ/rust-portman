@@ -35,7 +35,7 @@ struct Arguments {
     #[clap(short, long, default_value_t = 1000)]
     num_ports: u16,
 }
-
+#[derive(Debug)]
 enum ClientRequest {
     Gimme {
         service_name: String,
@@ -43,6 +43,7 @@ enum ClientRequest {
     },
     List,
     Terminate,
+    Invalid,
 }
 
 fn main() {
@@ -71,15 +72,25 @@ fn main() {
     }
 }
 
+//  Given a connected socket, returns the line of text
+//  received from it.  WE don't really havfe
 fn read_request_line(socket: TcpStream) -> String {
     let mut line: Vec<u8> = vec![];
     let mut reader = BufReader::new(socket.try_clone().unwrap());
-    let count = reader.read_until(b'\n', &mut line).unwrap();
+    if let Ok(count) = reader.read_until(b'\n', &mut line) {
+        String::from_utf8_lossy(&line).trim_end().to_string()
+    } else {
+        String::from("") // Illegal request
+    }
+}
 
-    String::from_utf8_lossy(&line).trim_end().to_string()
+fn decode_request(request_line: &str) -> ClientRequest {
+    ClientRequest::Invalid
 }
 
 fn process_request(socket: TcpStream) {
     println!("Connected from {:#?}", socket.peer_addr());
+    let request_line = read_request_line(socket);
     println!("Request: {}", read_request_line(socket));
+    let request = decode_request(request_line);
 }
