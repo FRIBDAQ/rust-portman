@@ -56,7 +56,6 @@ pub fn responder(base: u16, num: u16, request_chan: mpsc::Receiver<RequestMessag
                 user_name,
                 reply_chan,
             } => {
-                println!("Request service {} for user {}", service_name, user_name);
                 match pool.allocate(&service_name, &user_name) {
                     Ok(alloc) => reply_chan
                         .send(Ok(ReplyMessage::AllocatePort(alloc.port())))
@@ -65,13 +64,11 @@ pub fn responder(base: u16, num: u16, request_chan: mpsc::Receiver<RequestMessag
                 }
             }
             RequestMessage::FreePort(p) => {
-                println!("Free Port {}", p);
                 let _ = pool.free(p).is_ok(); // We can't really handle errors.
             }
             RequestMessage::ListAllocations(reply_chan) => {
-                println!("List allocations");
                 reply_chan
-                    .send(Ok(ReplyMessage::ListAllocations(vec![])))
+                    .send(Ok(ReplyMessage::ListAllocations(pool.usage())))
                     .unwrap();
             }
             RequestMessage::Terminate => break,

@@ -20,6 +20,9 @@ fn main() {
         responder::release_port(port_num, &request_send).unwrap();
     }
 
+    let allocations = responder::get_allocations(&request_send);
+    analyze_allocations(allocations);
+
     let terminate = responder::RequestMessage::Terminate;
     request_send.send(terminate).unwrap();
 
