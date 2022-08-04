@@ -1,5 +1,7 @@
 use clap::Parser;
 use portman::responder::responder;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::net::SocketAddr;
 use std::net::TcpListener;
 use std::net::TcpStream;
@@ -34,6 +36,15 @@ struct Arguments {
     num_ports: u16,
 }
 
+enum ClientRequest {
+    Gimme {
+        service_name: String,
+        user_name: String,
+    },
+    List,
+    Terminate,
+}
+
 fn main() {
     let args = Arguments::parse();
     println!("{:#?}", args);
@@ -53,10 +64,22 @@ fn main() {
     for request in server.incoming() {
         if let Ok(socket) = request {
             process_request(socket);
+        } else {
+            // Fill in failure code here when we can figure out
+            // what it should look like.
         }
     }
 }
 
+fn read_request_line(socket: TcpStream) -> String {
+    let mut line: Vec<u8> = vec![];
+    let mut reader = BufReader::new(socket.try_clone().unwrap());
+    let count = reader.read_until(b'\n', &mut line).unwrap();
+
+    String::from_utf8_lossy(&line).trim_end().to_string()
+}
+
 fn process_request(socket: TcpStream) {
     println!("Connected from {:#?}", socket.peer_addr());
+    println!("Request: {}", read_request_line(socket));
 }
