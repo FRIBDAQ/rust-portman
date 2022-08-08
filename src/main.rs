@@ -8,6 +8,7 @@ use std::net;
 use std::net::SocketAddr;
 use std::net::TcpListener;
 use std::net::TcpStream;
+use std::process;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -151,6 +152,7 @@ fn process_request(req_chan: &RequestChannel, so: &Socket) {
         }
         ClientRequest::Terminate => {
             println!("Client requesting shutdown");
+            process::exit(0);
         }
         ClientRequest::Invalid => {
             println!("Client sent an invalid request");
