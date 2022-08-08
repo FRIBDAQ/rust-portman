@@ -2,12 +2,19 @@ use clap::Parser;
 use portman::responder::responder;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::io::Read;
+use std::io::Write;
+use std::net;
 use std::net::SocketAddr;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time;
 
+type RequestChannel = Arc<Mutex<mpsc::Sender<responder::RequestMessage>>>;
+type Socket = Arc<Mutex<TcpStream>>;
 //
 // Clap is kind of nice... with a few directives and
 // a struct it'll generate the code to do reasonable
@@ -53,6 +60,7 @@ fn main() {
     // Create the request channel and start the resopnder.
 
     let (request_send, request_receive) = mpsc::channel();
+    let safe_req = Arc::new(Mutex::new(request_send));
     let service_handle = thread::spawn(move || {
         responder::responder(args.port_base, args.num_ports, request_receive)
     });
@@ -64,7 +72,8 @@ fn main() {
 
     for request in server.incoming() {
         if let Ok(socket) = request {
-            process_request(&request_send, socket);
+            let safe_socket = Arc::new(Mutex::new(socket));
+            process_request(&safe_req, &safe_socket);
         } else {
             // Fill in failure code here when we can figure out
             // what it should look like.
@@ -74,9 +83,10 @@ fn main() {
 
 //  Given a connected socket, returns the line of text
 //  received from it.  WE don't really havfe
-fn read_request_line(socket: &TcpStream) -> String {
+fn read_request_line(socket: &Socket) -> String {
     let mut line: Vec<u8> = vec![];
-    let mut reader = BufReader::new(socket.try_clone().unwrap());
+    let so = socket.lock().unwrap();
+    let mut reader = BufReader::new(so.try_clone().unwrap());
     if let Ok(count) = reader.read_until(b'\n', &mut line) {
         String::from_utf8_lossy(&line).trim_end().to_string()
     } else {
@@ -110,10 +120,13 @@ fn decode_request(request_line: &str) -> ClientRequest {
     }
 }
 
-fn process_request(req_chan: &mpsc::Sender<responder::RequestMessage>, socket: TcpStream) {
-    /// socket.set_read_timeout();    // Limit time to request.
-    println!("Connected from {:#?}", socket.peer_addr());
-    let request_line = read_request_line(&socket);
+fn process_request(req_chan: &RequestChannel, so: &Socket) {
+    so.lock()
+        .unwrap()
+        .set_read_timeout(Some(time::Duration::from_secs(10)))
+        .unwrap(); // Limit time to request.
+    println!("Connected from {:#?}", so.lock().unwrap().peer_addr());
+    let request_line = read_request_line(so);
     println!("Request: {}", request_line);
     let request = decode_request(&request_line);
     match request {
@@ -124,6 +137,12 @@ fn process_request(req_chan: &mpsc::Sender<responder::RequestMessage>, socket: T
             println!(
                 "Client Requesting port for {} user {}",
                 service_name, user_name
+            );
+            create_allocation(
+                Arc::clone(req_chan),
+                Arc::clone(&so),
+                &service_name,
+                &user_name,
             );
         }
         ClientRequest::List => {
@@ -138,11 +157,78 @@ fn process_request(req_chan: &mpsc::Sender<responder::RequestMessage>, socket: T
     }
 }
 
+///
+/// ## is_local
+///
+///   Determine if a socket is connected to a local peer.
+///
+fn is_local(so: &Socket) -> bool {
+    let socket = so.lock().unwrap();
+    if let Ok(peer) = socket.peer_addr() {
+        if peer.is_ipv4() {
+            peer.ip() == net::Ipv4Addr::new(127, 0, 0, 1)
+        } else if peer.is_ipv6() {
+            peer.ip() == net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
 //
 //  Functions to process individual requests
 //
 
-
+///
+/// ## create_allocation
+///
+///    Given an allocation request, allocates a port from the
+///    service thread and spins off a thread to monitor the socket on which
+///    the service was requested - when the socket becomes readable,
+///    that thread drops the allocated port from the list of
+///    allocated port.  This request is only allowed from local connections.
+///
+fn create_allocation(req_chan: RequestChannel, so: Socket, service: &str, user: &str) {
+    if !is_local(&so) {
+        let reply = String::from("FAIL can only allocate to local senders\n");
+        so.lock().unwrap().write_all(reply.as_bytes()).unwrap();
+        so.lock().unwrap().flush().unwrap();
+    } else {
+        let info = responder::request_port(service, user, &req_chan.lock().unwrap());
+        match info {
+            Ok(port) => {
+                let reply = format!("OK {}", port);
+                so.lock().unwrap().write_all(reply.as_bytes()).unwrap();
+                so.lock().unwrap().flush().unwrap();
+                thread::spawn(move || monitor_port(Arc::clone(&so), port, Arc::clone(&req_chan)));
+            }
+            Err(str) => {
+                let reply = format!("FAIL {}", str);
+                so.lock().unwrap().write_all(reply.as_bytes()).unwrap();
+                so.lock().unwrap().flush().unwrap();
+            }
+        }
+    }
+}
 //
 // Monitor a socket so that its port can be released when
-// the socket either closes or, alternatively, 
+// the socket either closes or, alternatively,
+
+fn monitor_port(socket: Socket, port: u16, req_chan: RequestChannel) {
+    socket.lock().unwrap().set_read_timeout(None).unwrap(); // Turn off timeout
+    let mut junk = String::new();
+    if let Ok(n) = socket.lock().unwrap().read_to_string(&mut junk) {
+    } else {
+    }
+
+    // Port is now closed so drop our side of the connection
+
+    socket
+        .lock()
+        .unwrap()
+        .shutdown(net::Shutdown::Both)
+        .unwrap();
+
+    responder::release_port(port, &req_chan.lock().unwrap()).unwrap();
+}
