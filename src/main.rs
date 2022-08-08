@@ -140,19 +140,21 @@ fn process_request(req_chan: &RequestChannel, so: &Socket) {
             );
             create_allocation(
                 Arc::clone(req_chan),
-                Arc::clone(&so),
+                Arc::clone(so),
                 &service_name,
                 &user_name,
             );
         }
         ClientRequest::List => {
             println!("Client requesting a list of port allocations");
+            list_allocations(Arc::clone(req_chan), Arc::clone(so));
         }
         ClientRequest::Terminate => {
             println!("Client requesting shutdown");
         }
         ClientRequest::Invalid => {
             println!("Client sent an invalid request");
+            invalid_request(Arc::clone(so));
         }
     }
 }
@@ -179,6 +181,33 @@ fn is_local(so: &Socket) -> bool {
 //
 //  Functions to process individual requests
 //
+
+///
+/// ## invalid_request
+///    Report that a request was invalid.
+///
+fn invalid_request(sock: Socket) {
+    sock.lock()
+        .unwrap()
+        .write_all(String::from("FAIL - invalid request\n").as_bytes())
+        .unwrap();
+    sock.lock().unwrap().flush().unwrap();
+}
+
+///
+/// ## list_allocations
+///    Produce a list of allocations to the output socket.
+///
+fn list_allocations(req_chan: RequestChannel, so: Socket) {
+    let allocations = responder::get_allocations(&req_chan.lock().unwrap()).unwrap();
+    let mut sock = so.lock().unwrap();
+    sock.write_all(format!("OK {}\n", allocations.len()).as_bytes())
+        .unwrap();
+    for aloc in allocations {
+        sock.write_all(format!("{}\n", aloc).as_bytes()).unwrap();
+    }
+    sock.flush().unwrap();
+}
 
 ///
 /// ## create_allocation
