@@ -96,16 +96,34 @@ fn parse_arguments() -> Arguments
         num_ports  :  1000,
     };
     
+    // Use clap's parser override the default values.
+    
     if let Some(listen) = parser.value_of("listen-port") {
         if let Ok(listen_value) = listen.parse::<u16>() {
             result.listen_port = listen_value;
         } else {
-            eprintln!("The listen port value must be a 16 bit integer");
+            eprintln!("The listen port value must be a 16 bit unsigned integer");
             process::exit(-1);
         }
     };
     
-    // Use clap's parser override the default values.
+    if let Some(base) = parser.value_of("port-base") {
+         if let Ok(base_value) = base.parse::<u16>() {
+            result.port_base = base_value;
+         } else {
+            eprintln!("The port-base value must be a 16 bit unsigned integer");
+            process::exit(-1);
+         }
+    }
+    
+    if let Some(num) = parser.value_of("num-ports") {
+        if let Ok(num_value) = num.parse::<u16>() {
+            result.num_ports = num_value;
+        } else {
+            eprintln!("The num-ports value must be a 16 bit unsigned integer");
+            process::exit(-1);
+        }
+    }
     
     // return the parsed parameters.
     result
