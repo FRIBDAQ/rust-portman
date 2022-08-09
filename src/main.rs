@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{Arg, App, SubCommand};
 use portman::responder::responder;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -33,14 +33,19 @@ type Socket = Arc<Mutex<TcpStream>>;
 // invoked will parse the command line and return an Arguments
 // struct.
 //
-#[derive(Parser, Default, Debug)]
-#[clap(author="Author: Ron Fox", version="1.0", about="Purpose: NSCLDAQ Port manager", long_about = None)]
+//#[derive(Parser, Default, Debug)]
+//#[clap(author="Author: Ron Fox", version="1.0", about="Purpose: NSCLDAQ Port manager", long_about = None)]
+
+// We're going to use clap to fill in this struct.
+// Note that in current versios of Clap, we can just annotate the struct
+// and clap will do the rest.
+// However at present, up to debian 11, we're restricted to 2.27.1 at highest
+// and that's a tiny bit more cumbersome.
+//
+#[derive(Debug, Clone, Copy)]
 struct Arguments {
-    #[clap(short, long, default_value_t = 30000)]
     listen_port: u16,
-    #[clap(short, long, default_value_t = 31000)]
     port_base: u16,
-    #[clap(short, long, default_value_t = 1000)]
     num_ports: u16,
 }
 #[derive(Debug)]
@@ -54,8 +59,61 @@ enum ClientRequest {
     Invalid,
 }
 
+// Use clap to specify/process the command line arguments
+// into an Arguments struct.
+fn parse_arguments() -> Arguments
+{
+    // set up the clap parser:
+    
+    let parser = App::new("portman")
+        .version("1.0")
+        .author("Ron Fox")
+        .about("Rust replacement for NSCLDAQ port manager - does not need container")
+        .arg(Arg::with_name("listen-port")
+            .short("l")
+            .long("listen-port")
+            .value_name("PORTNUM")
+            .help("Port number on which the port manager listens for connections")
+            .takes_value(true).default_value("31000"))
+        .arg(Arg::with_name("port-base")
+            .short("p")
+            .long("port-base")
+            .value_name("BASE")
+            .help("Base of the port pool portman pmanagers")
+            .takes_value(true).default_value("30000"))
+        .arg(Arg::with_name("num-ports")
+            .short("n")
+            .long("num-ports")
+            .value_name("NUM")
+            .help("Number of ports portman manages")
+            .takes_value(true).default_value("1000")).get_matches();
+    
+    // Default parameter values:
+    
+    let mut result = Arguments {
+        listen_port : 31000,
+        port_base  : 30000,
+        num_ports  :  1000,
+    };
+    
+    if let Some(listen) = parser.value_of("listen-port") {
+        if let Ok(listen_value) = listen.parse::<u16>() {
+            result.listen_port = listen_value;
+        } else {
+            eprintln!("The listen port value must be a 16 bit integer");
+            process::exit(-1);
+        }
+    };
+    
+    // Use clap's parser override the default values.
+    
+    // return the parsed parameters.
+    result
+}
+
 fn main() {
-    let args = Arguments::parse();
+    
+    let args = parse_arguments();
     println!("{:#?}", args);
 
     // Create the request channel and start the resopnder.
@@ -229,13 +287,13 @@ fn create_allocation(req_chan: RequestChannel, so: Socket, service: &str, user: 
         let info = responder::request_port(service, user, &req_chan.lock().unwrap());
         match info {
             Ok(port) => {
-                let reply = format!("OK {}", port);
+                let reply = format!("OK {}\n", port);
                 so.lock().unwrap().write_all(reply.as_bytes()).unwrap();
                 so.lock().unwrap().flush().unwrap();
                 thread::spawn(move || monitor_port(Arc::clone(&so), port, Arc::clone(&req_chan)));
             }
             Err(str) => {
-                let reply = format!("FAIL {}", str);
+                let reply = format!("FAIL {}\n", str);
                 so.lock().unwrap().write_all(reply.as_bytes()).unwrap();
                 so.lock().unwrap().flush().unwrap();
             }
