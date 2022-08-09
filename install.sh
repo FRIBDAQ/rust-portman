@@ -23,11 +23,11 @@ fi
 
 echo Checking for portman binary:
 
-if test -x target/release/portman
+if  test !  -x target/release/portman
 then
     echo Release target of portman not yet built -- attemptint to build:
     cargo build --release
-    if "$?" != "0"
+    if test "$?" != "0"
     then
 	echo "Build of portman failed..fix problems and try again."
 	exit -1
@@ -43,7 +43,7 @@ install -d $PREFIX/bin
 echo Installing:
 
 install -m 0755  target/release/portman $PREFIX/bin
-if "$?" = "0"
+if test  "$?" = "0"
 then
     echo portman installed in $PREFIX/bin/portman
     exit 0
