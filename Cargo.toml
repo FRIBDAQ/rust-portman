@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2018"
 description="NSCLDAQ port manager server"
 license = "GPL2"
-repository="git@git.frib.msu.edu:daqdev/portmanager.git"
+repository="https://git.frib.msu.edu/daqdev/portmanager.git"
 homepage="http://frib.msu.edu/docs/daq"
 
 
