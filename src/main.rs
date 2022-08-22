@@ -1,4 +1,4 @@
-use clap::{Arg, App, SubCommand};
+use clap::{App, Arg, SubCommand};
 use portman::responder::responder;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -61,43 +61,52 @@ enum ClientRequest {
 
 // Use clap to specify/process the command line arguments
 // into an Arguments struct.
-fn parse_arguments() -> Arguments
-{
+fn parse_arguments() -> Arguments {
     // set up the clap parser:
-    
+
     let parser = App::new("portman")
         .version("1.0")
         .author("Ron Fox")
         .about("Rust replacement for NSCLDAQ port manager - does not need container")
-        .arg(Arg::with_name("listen-port")
-            .short("l")
-            .long("listen-port")
-            .value_name("PORTNUM")
-            .help("Port number on which the port manager listens for connections")
-            .takes_value(true).default_value("30000"))
-        .arg(Arg::with_name("port-base")
-            .short("p")
-            .long("port-base")
-            .value_name("BASE")
-            .help("Base of the port pool portman pmanagers")
-            .takes_value(true).default_value("31000"))
-        .arg(Arg::with_name("num-ports")
-            .short("n")
-            .long("num-ports")
-            .value_name("NUM")
-            .help("Number of ports portman manages")
-            .takes_value(true).default_value("1000")).get_matches();
-    
+        .arg(
+            Arg::with_name("listen-port")
+                .short("l")
+                .long("listen-port")
+                .value_name("PORTNUM")
+                .help("Port number on which the port manager listens for connections")
+                .takes_value(true)
+                .default_value("30000"),
+        )
+        .arg(
+            Arg::with_name("port-base")
+                .short("p")
+                .long("port-base")
+                .value_name("BASE")
+                .help("Base of the port pool portman pmanagers")
+                .takes_value(true)
+                .default_value("31000"),
+        )
+        .arg(
+            Arg::with_name("num-ports")
+                .short("n")
+                .long("num-ports")
+                .value_name("NUM")
+                .help("Number of ports portman manages")
+                .takes_value(true)
+                .default_value("1000"),
+        )
+        .get_matches();
+
     // Default parameter values:
-    
+
     let mut result = Arguments {
-        listen_port : 30000,
-        port_base  : 31000,
-        num_ports  :  1000,
+        listen_port: 30000,
+        port_base: 31000,
+        num_ports: 1000,
     };
-    
+
     // Use clap's parser override the default values.
-    
+
     if let Some(listen) = parser.value_of("listen-port") {
         if let Ok(listen_value) = listen.parse::<u16>() {
             result.listen_port = listen_value;
@@ -106,16 +115,16 @@ fn parse_arguments() -> Arguments
             process::exit(-1);
         }
     };
-    
+
     if let Some(base) = parser.value_of("port-base") {
-         if let Ok(base_value) = base.parse::<u16>() {
+        if let Ok(base_value) = base.parse::<u16>() {
             result.port_base = base_value;
-         } else {
+        } else {
             eprintln!("The port-base value must be a 16 bit unsigned integer");
             process::exit(-1);
-         }
+        }
     }
-    
+
     if let Some(num) = parser.value_of("num-ports") {
         if let Ok(num_value) = num.parse::<u16>() {
             result.num_ports = num_value;
@@ -124,13 +133,12 @@ fn parse_arguments() -> Arguments
             process::exit(-1);
         }
     }
-    
+
     // return the parsed parameters.
     result
 }
 
 fn main() {
-    
     let args = parse_arguments();
     println!("{:#?}", args);
 
@@ -150,7 +158,8 @@ fn main() {
     for request in server.incoming() {
         if let Ok(socket) = request {
             let safe_socket = Arc::new(Mutex::new(socket));
-            process_request(&safe_req, &safe_socket);
+            let myreq = Arc::clone(&safe_req);
+            thread::spawn(move || process_request(Arc::clone(&myreq), Arc::clone(&safe_socket)));
         } else {
             // Fill in failure code here when we can figure out
             // what it should look like.
@@ -196,45 +205,76 @@ fn decode_request(request_line: &str) -> ClientRequest {
         ClientRequest::Invalid
     }
 }
+// Release allocated ports back to the pool:
 
-fn process_request(req_chan: &RequestChannel, so: &Socket) {
-    so.lock()
-        .unwrap()
-        .set_read_timeout(Some(time::Duration::from_secs(10)))
-        .unwrap(); // Limit time to request.
+fn release_ports(req_chan: &RequestChannel, ports: Vec<u16>) {
+    for port in ports {
+        responder::release_port(port, &req_chan.lock().unwrap()).unwrap();
+    }
+}
+
+fn process_request(req_chan: RequestChannel, so: Socket) {
+    let mut allocated_ports = Vec::<u16>::new();
     println!("Connected from {:#?}", so.lock().unwrap().peer_addr());
-    let request_line = read_request_line(so);
-    println!("Request: {}", request_line);
-    let request = decode_request(&request_line);
-    match request {
-        ClientRequest::Gimme {
-            service_name,
-            user_name,
-        } => {
-            println!(
-                "Client Requesting port for {} user {}",
-                service_name, user_name
-            );
-            create_allocation(
-                Arc::clone(req_chan),
-                Arc::clone(so),
-                &service_name,
-                &user_name,
-            );
+    loop {
+        let request_line = read_request_line(&so);
+        if request_line.len() == 0 {
+            break;
         }
-        ClientRequest::List => {
-            println!("Client requesting a list of port allocations");
-            list_allocations(Arc::clone(req_chan), Arc::clone(so));
-        }
-        ClientRequest::Terminate => {
-            println!("Client requesting shutdown");
-            process::exit(0);
-        }
-        ClientRequest::Invalid => {
-            println!("Client sent an invalid request");
-            invalid_request(Arc::clone(so));
+        println!("Request: {}", request_line);
+        let request = decode_request(&request_line);
+        match request {
+            ClientRequest::Gimme {
+                service_name,
+                user_name,
+            } => {
+                match create_allocation(
+                    Arc::clone(&req_chan),
+                    Arc::clone(&so),
+                    &service_name,
+                    &user_name,
+                ) {
+                    Ok(port) => {
+                        allocated_ports.push(port);
+                        if so
+                            .lock()
+                            .unwrap()
+                            .write_all(format!("OK {}\n", port).as_bytes())
+                            .is_err()
+                        {
+                            // here if lost connection
+                            break;
+                        }
+                    }
+                    Err(msg) => {
+                        if so
+                            .lock()
+                            .unwrap()
+                            .write_all(format!("FAIL - {}\n", msg).as_bytes())
+                            .is_err()
+                        {
+                            break;
+                        }
+                        break; // /exit regardless...
+                    }
+                };
+            }
+            ClientRequest::List => {
+                list_allocations(&req_chan, &so);
+            }
+            ClientRequest::Terminate => {
+                println!("Client requesting shutdown");
+                process::exit(0);
+            }
+            ClientRequest::Invalid => {
+                invalid_request(&so);
+
+                break; // only allow one.
+            }
         }
     }
+    release_ports(&req_chan, allocated_ports);
+    let _ = so.lock().unwrap().shutdown(net::Shutdown::Both);
 }
 
 ///
@@ -264,7 +304,7 @@ fn is_local(so: &Socket) -> bool {
 /// ## invalid_request
 ///    Report that a request was invalid.
 ///
-fn invalid_request(sock: Socket) {
+fn invalid_request(sock: &Socket) {
     sock.lock()
         .unwrap()
         .write_all(String::from("FAIL - invalid request\n").as_bytes())
@@ -276,20 +316,18 @@ fn invalid_request(sock: Socket) {
 /// ## list_allocations
 ///    Produce a list of allocations to the output socket.
 ///
-fn list_allocations(req_chan: RequestChannel, so: Socket) {
+fn list_allocations(req_chan: &RequestChannel, so: &Socket) {
     let allocations = responder::get_allocations(&req_chan.lock().unwrap()).unwrap();
     let mut sock = so.lock().unwrap();
-    let result =
-    	sock.write_all(format!("OK {}\n", allocations.len()).as_bytes());
+    let result = sock.write_all(format!("OK {}\n", allocations.len()).as_bytes());
     if result.is_err() {
-       return;
+        return;
     }
     for aloc in allocations {
-    	let result =
-	    sock.write_all(format!("{}\n", aloc).as_bytes());
-	if result.is_err() {
-	   return;
-	}
+        let result = sock.write_all(format!("{}\n", aloc).as_bytes());
+        if result.is_err() {
+            return;
+        }
     }
     let result = sock.flush();
     return;
@@ -304,46 +342,15 @@ fn list_allocations(req_chan: RequestChannel, so: Socket) {
 ///    that thread drops the allocated port from the list of
 ///    allocated port.  This request is only allowed from local connections.
 ///
-fn create_allocation(req_chan: RequestChannel, so: Socket, service: &str, user: &str) {
+fn create_allocation(
+    req_chan: RequestChannel,
+    so: Socket,
+    service: &str,
+    user: &str,
+) -> Result<u16, String> {
     if !is_local(&so) {
-        let reply = String::from("FAIL can only allocate to local senders\n");
-        so.lock().unwrap().write_all(reply.as_bytes()).unwrap();
-        so.lock().unwrap().flush().unwrap();
+        Err(String::from("FAIL can only allocate to local senders\n"))
     } else {
-        let info = responder::request_port(service, user, &req_chan.lock().unwrap());
-        match info {
-            Ok(port) => {
-                let reply = format!("OK {}\n", port);
-                so.lock().unwrap().write_all(reply.as_bytes()).unwrap();
-                so.lock().unwrap().flush().unwrap();
-                thread::spawn(move || monitor_port(Arc::clone(&so), port, Arc::clone(&req_chan)));
-            }
-            Err(str) => {
-                let reply = format!("FAIL {}\n", str);
-                so.lock().unwrap().write_all(reply.as_bytes()).unwrap();
-                so.lock().unwrap().flush().unwrap();
-            }
-        }
+        responder::request_port(service, user, &req_chan.lock().unwrap())
     }
-}
-//
-// Monitor a socket so that its port can be released when
-// the socket either closes or, alternatively,
-
-fn monitor_port(socket: Socket, port: u16, req_chan: RequestChannel) {
-    socket.lock().unwrap().set_read_timeout(None).unwrap(); // Turn off timeout
-    let mut junk = String::new();
-    if let Ok(n) = socket.lock().unwrap().read_to_string(&mut junk) {
-    } else {
-    }
-
-    // Port is now closed so drop our side of the connection
-
-    socket
-        .lock()
-        .unwrap()
-        .shutdown(net::Shutdown::Both)
-        .unwrap();
-
-    responder::release_port(port, &req_chan.lock().unwrap()).unwrap();
 }
