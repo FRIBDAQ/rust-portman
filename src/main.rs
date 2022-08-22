@@ -91,8 +91,8 @@ fn parse_arguments() -> Arguments
     // Default parameter values:
     
     let mut result = Arguments {
-        listen_port : 31000,
-        port_base  : 30000,
+        listen_port : 30000,
+        port_base  : 31000,
         num_ports  :  1000,
     };
     
@@ -279,12 +279,20 @@ fn invalid_request(sock: Socket) {
 fn list_allocations(req_chan: RequestChannel, so: Socket) {
     let allocations = responder::get_allocations(&req_chan.lock().unwrap()).unwrap();
     let mut sock = so.lock().unwrap();
-    sock.write_all(format!("OK {}\n", allocations.len()).as_bytes())
-        .unwrap();
-    for aloc in allocations {
-        sock.write_all(format!("{}\n", aloc).as_bytes()).unwrap();
+    let result =
+    	sock.write_all(format!("OK {}\n", allocations.len()).as_bytes());
+    if result.is_err() {
+       return;
     }
-    sock.flush().unwrap();
+    for aloc in allocations {
+    	let result =
+	    sock.write_all(format!("{}\n", aloc).as_bytes());
+	if result.is_err() {
+	   return;
+	}
+    }
+    let result = sock.flush();
+    return;
 }
 
 ///
