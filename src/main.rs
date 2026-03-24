@@ -1,8 +1,7 @@
-use clap::{App, Arg, SubCommand};
+use clap::{App, Arg};
 use portman::responder::responder;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::io::Read;
 use std::io::Write;
 use std::net;
 use std::net::SocketAddr;
@@ -12,7 +11,6 @@ use std::process;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time;
 
 type RequestChannel = Arc<Mutex<mpsc::Sender<responder::RequestMessage>>>;
 type Socket = Arc<Mutex<TcpStream>>;
@@ -70,7 +68,7 @@ fn parse_arguments() -> Arguments {
         .about("Rust replacement for NSCLDAQ port manager - does not need container")
         .arg(
             Arg::with_name("listen-port")
-                .short("l")
+                .short('l')
                 .long("listen-port")
                 .value_name("PORTNUM")
                 .help("Port number on which the port manager listens for connections")
@@ -79,7 +77,7 @@ fn parse_arguments() -> Arguments {
         )
         .arg(
             Arg::with_name("port-base")
-                .short("p")
+                .short('p')
                 .long("port-base")
                 .value_name("BASE")
                 .help("Base of the port pool portman pmanagers")
@@ -88,7 +86,7 @@ fn parse_arguments() -> Arguments {
         )
         .arg(
             Arg::with_name("num-ports")
-                .short("n")
+                .short('n')
                 .long("num-ports")
                 .value_name("NUM")
                 .help("Number of ports portman manages")
@@ -146,7 +144,7 @@ fn main() {
 
     let (request_send, request_receive) = mpsc::channel();
     let safe_req = Arc::new(Mutex::new(request_send));
-    let service_handle = thread::spawn(move || {
+    let _service_handle = thread::spawn(move || {
         responder::responder(args.port_base, args.num_ports, request_receive)
     });
 
@@ -173,7 +171,7 @@ fn read_request_line(socket: &Socket) -> String {
     let mut line: Vec<u8> = vec![];
     let so = socket.lock().unwrap();
     let mut reader = BufReader::new(so.try_clone().unwrap());
-    if let Ok(count) = reader.read_until(b'\n', &mut line) {
+    if let Ok(_) = reader.read_until(b'\n', &mut line) {
         String::from_utf8_lossy(&line).trim_end().to_string()
     } else {
         String::from("") // Illegal request
@@ -329,7 +327,7 @@ fn list_allocations(req_chan: &RequestChannel, so: &Socket) {
             return;
         }
     }
-    let result = sock.flush();
+    let _ = sock.flush();
     return;
 }
 
