@@ -20,4 +20,4 @@ homepage="http://frib.msu.edu/docs/daq"
 #  Note at this time.. in order to get a debian buster
 #  Compilation we _must_ specify an exact version
 #
-clap =  "=2.27.1"
+clap =  "=3.2.25"

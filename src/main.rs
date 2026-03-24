@@ -2,7 +2,6 @@ use clap::{App, Arg, SubCommand};
 use portman::responder::responder;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::io::Read;
 use std::io::Write;
 use std::net;
 use std::net::SocketAddr;
@@ -12,7 +11,6 @@ use std::process;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time;
 
 type RequestChannel = Arc<Mutex<mpsc::Sender<responder::RequestMessage>>>;
 type Socket = Arc<Mutex<TcpStream>>;
@@ -70,7 +68,7 @@ fn parse_arguments() -> Arguments {
         .about("Rust replacement for NSCLDAQ port manager - does not need container")
         .arg(
             Arg::with_name("listen-port")
-                .short("l")
+                .short('l')
                 .long("listen-port")
                 .value_name("PORTNUM")
                 .help("Port number on which the port manager listens for connections")
@@ -79,7 +77,7 @@ fn parse_arguments() -> Arguments {
         )
         .arg(
             Arg::with_name("port-base")
-                .short("p")
+                .short('p')
                 .long("port-base")
                 .value_name("BASE")
                 .help("Base of the port pool portman pmanagers")
@@ -88,7 +86,7 @@ fn parse_arguments() -> Arguments {
         )
         .arg(
             Arg::with_name("num-ports")
-                .short("n")
+                .short('n')
                 .long("num-ports")
                 .value_name("NUM")
                 .help("Number of ports portman manages")
