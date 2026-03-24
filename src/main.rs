@@ -1,4 +1,4 @@
-use clap::{App, Arg};
+use clap::{command, value_parser, Arg};
 use portman::responder::responder;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -62,36 +62,24 @@ enum ClientRequest {
 fn parse_arguments() -> Arguments {
     // set up the clap parser:
 
-    let parser = App::new("portman")
+    let parser =command!()
         .version("1.0")
         .author("Ron Fox")
         .about("Rust replacement for NSCLDAQ port manager - does not need container")
-        .arg(
-            Arg::with_name("listen-port")
-                .short('l')
-                .long("listen-port")
-                .value_name("PORTNUM")
-                .help("Port number on which the port manager listens for connections")
-                .takes_value(true)
-                .default_value("30000"),
+        .arg(Arg::new("listen-port").short('l').long("listen-port")
+                .required(true)
+                .default_value("30000")
+                .value_parser(value_parser!(u16))
         )
         .arg(
-            Arg::with_name("port-base")
-                .short('p')
-                .long("port-base")
-                .value_name("BASE")
-                .help("Base of the port pool portman pmanagers")
-                .takes_value(true)
-                .default_value("31000"),
+            Arg::new("port-base").short('p').long("port-base")
+                .default_value("31000")
+                .value_parser(value_parser!(u16))
         )
         .arg(
-            Arg::with_name("num-ports")
-                .short('n')
-                .long("num-ports")
-                .value_name("NUM")
-                .help("Number of ports portman manages")
-                .takes_value(true)
-                .default_value("1000"),
+            Arg::new("num-ports").short('n').long("num-ports")
+                .default_value("1000")
+                .value_parser(value_parser!(u16))
         )
         .get_matches();
 
@@ -105,31 +93,25 @@ fn parse_arguments() -> Arguments {
 
     // Use clap's parser override the default values.
 
-    if let Some(listen) = parser.value_of("listen-port") {
-        if let Ok(listen_value) = listen.parse::<u16>() {
-            result.listen_port = listen_value;
-        } else {
+    if let Some(listen_value) = parser.get_one::<u16>("listen-port") {
+            result.listen_port = *listen_value;
+    } else {
             eprintln!("The listen port value must be a 16 bit unsigned integer");
             process::exit(-1);
-        }
-    };
-
-    if let Some(base) = parser.value_of("port-base") {
-        if let Ok(base_value) = base.parse::<u16>() {
-            result.port_base = base_value;
-        } else {
-            eprintln!("The port-base value must be a 16 bit unsigned integer");
-            process::exit(-1);
-        }
     }
 
-    if let Some(num) = parser.value_of("num-ports") {
-        if let Ok(num_value) = num.parse::<u16>() {
-            result.num_ports = num_value;
-        } else {
-            eprintln!("The num-ports value must be a 16 bit unsigned integer");
-            process::exit(-1);
-        }
+    if let Some(base_value) = parser.get_one::<u16>("port-base") {
+            result.port_base = *base_value;
+    } else {
+        eprintln!("The port-base value must be a 16 bit unsigned integer");
+        process::exit(-1);
+    };
+
+    if let Some(num_value) = parser.get_one::<u16>("num-ports") {
+            result.num_ports = *num_value;
+    } else {
+        eprintln!("The num-ports value must be a 16 bit unsigned integer");
+        process::exit(-1);
     }
 
     // return the parsed parameters.
