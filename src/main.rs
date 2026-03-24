@@ -1,4 +1,4 @@
-use clap::{App, Arg, SubCommand};
+use clap::{App, Arg};
 use portman::responder::responder;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -144,7 +144,7 @@ fn main() {
 
     let (request_send, request_receive) = mpsc::channel();
     let safe_req = Arc::new(Mutex::new(request_send));
-    let service_handle = thread::spawn(move || {
+    let _service_handle = thread::spawn(move || {
         responder::responder(args.port_base, args.num_ports, request_receive)
     });
 
@@ -171,7 +171,7 @@ fn read_request_line(socket: &Socket) -> String {
     let mut line: Vec<u8> = vec![];
     let so = socket.lock().unwrap();
     let mut reader = BufReader::new(so.try_clone().unwrap());
-    if let Ok(count) = reader.read_until(b'\n', &mut line) {
+    if let Ok(_) = reader.read_until(b'\n', &mut line) {
         String::from_utf8_lossy(&line).trim_end().to_string()
     } else {
         String::from("") // Illegal request
@@ -327,7 +327,7 @@ fn list_allocations(req_chan: &RequestChannel, so: &Socket) {
             return;
         }
     }
-    let result = sock.flush();
+    let _ = sock.flush();
     return;
 }
 
