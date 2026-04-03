@@ -67,7 +67,6 @@ fn parse_arguments() -> Arguments {
         .author("Ron Fox")
         .about("Rust replacement for NSCLDAQ port manager - does not need container")
         .arg(Arg::new("listen-port").short('l').long("listen-port")
-                .required(true)
                 .default_value("30000")
                 .value_parser(value_parser!(u16))
         )
